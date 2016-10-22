@@ -71,6 +71,7 @@ import org.apache.activemq.artemis.core.paging.PagingManager;
 import org.apache.activemq.artemis.core.paging.cursor.PageSubscription;
 import org.apache.activemq.artemis.core.paging.impl.PagingManagerImpl;
 import org.apache.activemq.artemis.core.paging.impl.PagingStoreFactoryNIO;
+import org.apache.activemq.artemis.core.persistence.AddressBindingInfo;
 import org.apache.activemq.artemis.core.persistence.GroupingInfo;
 import org.apache.activemq.artemis.core.persistence.OperationContext;
 import org.apache.activemq.artemis.core.persistence.QueueBindingInfo;
@@ -2093,7 +2094,9 @@ public class ActiveMQServerImpl implements ActiveMQServer {
 
       List<GroupingInfo> groupingInfos = new ArrayList<>();
 
-      journalInfo[0] = storageManager.loadBindingJournal(queueBindingInfos, groupingInfos);
+      List<AddressBindingInfo> addressBindingInfos = new ArrayList<>();
+
+      journalInfo[0] = storageManager.loadBindingJournal(queueBindingInfos, groupingInfos, addressBindingInfos);
 
       recoverStoredConfigs();
 
@@ -2102,6 +2105,10 @@ public class ActiveMQServerImpl implements ActiveMQServer {
       journalLoader.initQueues(queueBindingInfosMap, queueBindingInfos);
 
       journalLoader.handleGroupingBindings(groupingInfos);
+
+      Map<Long, AddressBindingInfo> addressBindingInfosMap = new HashMap<>();
+
+      journalLoader.initAddresses(addressBindingInfosMap, addressBindingInfos);
 
       Map<SimpleString, List<Pair<byte[], Long>>> duplicateIDMap = new HashMap<>();
 
@@ -2201,6 +2208,14 @@ public class ActiveMQServerImpl implements ActiveMQServer {
       final QueueConfig queueConfig = queueConfigBuilder.filter(filter).pagingManager(pagingManager).user(user).durable(durable).temporary(temporary).autoCreated(autoCreated).build();
       final Queue queue = queueFactory.createQueueWith(queueConfig);
 
+      boolean addressAlreadyExists = true;
+
+      if (postOffice.getAddressInfo(queue.getAddress()) == null) {
+         postOffice.addAddressInfo(new AddressInfo(queue.getAddress())
+                           .setRoutingType(AddressInfo.RoutingType.MULTICAST));
+         addressAlreadyExists = false;
+      }
+
       if (transientQueue) {
          queue.setConsumersRefCount(new TransientQueueManagerImpl(this, queue.getName()));
       } else if (queue.isAutoCreated()) {
@@ -2211,6 +2226,9 @@ public class ActiveMQServerImpl implements ActiveMQServer {
 
       if (queue.isDurable()) {
          storageManager.addQueueBinding(txID, localQueueBinding);
+         if (!addressAlreadyExists) {
+            storageManager.addAddressBinding(txID, getAddressInfo(queue.getAddress()));
+         }
       }
 
       try {
