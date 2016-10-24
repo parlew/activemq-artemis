@@ -2050,7 +2050,7 @@ public class ActiveMQServerImpl implements ActiveMQServer {
          info.setDefaultDeleteOnNoConsumers(config.getDefaultDeleteOnNoConsumers());
          info.setDefaultMaxConsumers(config.getDefaultMaxConsumers());
 
-         addAddressInfo(info);
+         createOrUpdateAddressInfo(info);
          deployQueuesFromListCoreQueueConfiguration(config.getQueueConfigurations());
       }
    }
@@ -2154,8 +2154,8 @@ public class ActiveMQServerImpl implements ActiveMQServer {
    }
 
    @Override
-   public AddressInfo addAddressInfo(AddressInfo addressInfo) {
-      return postOffice.addAddressInfo(addressInfo);
+   public AddressInfo createOrUpdateAddressInfo(AddressInfo addressInfo) {
+      return postOffice.addOrUpdateAddressInfo(addressInfo);
    }
 
    @Override
@@ -2165,7 +2165,7 @@ public class ActiveMQServerImpl implements ActiveMQServer {
 
    @Override
    public AddressInfo getAddressInfo(SimpleString address) {
-      return postOffice.removeAddressInfo(address);
+      return postOffice.getAddressInfo(address);
    }
 
    private Queue createQueue(final SimpleString addressName,
@@ -2201,15 +2201,13 @@ public class ActiveMQServerImpl implements ActiveMQServer {
       final QueueConfig queueConfig = queueConfigBuilder.filter(filter).pagingManager(pagingManager).user(user).durable(durable).temporary(temporary).autoCreated(autoCreated).build();
       final Queue queue = queueFactory.createQueueWith(queueConfig);
 
-      addAddressInfo(new AddressInfo(queue.getAddress()));
-
       if (transientQueue) {
          queue.setConsumersRefCount(new TransientQueueManagerImpl(this, queue.getName()));
       } else if (queue.isAutoCreated()) {
          queue.setConsumersRefCount(new AutoCreatedQueueManagerImpl(this.getJMSQueueDeleter(), queue.getName()));
       }
 
-      final QueueBinding localQueueBinding = new LocalQueueBinding(queue.getAddress(), queue, nodeManager.getNodeId());
+      final QueueBinding localQueueBinding = new LocalQueueBinding(getAddressInfo(queue.getAddress()), queue, nodeManager.getNodeId());
 
       if (queue.isDurable()) {
          storageManager.addQueueBinding(txID, localQueueBinding);
